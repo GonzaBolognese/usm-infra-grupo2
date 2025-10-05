@@ -1,407 +1,174 @@
-## 🎯 Objetivos de las Actividades
-
-### **Actividad 1 (Obligatoria)**: Agregar Columna Distribuidor
-Agregar la columna `distribuidor` a todos los archivos CSV antes de cargarlos a BigQuery/Data Warehouse.
-
-### **Actividad 2 (Opcional/Avanzada)**: Implementar Subida a Google Cloud Storage
-Implementar el método `_upload_to_gcs()` para subir automáticamente los archivos generados a un bucket de GCS.
-
----
-
-## 📋 ACTIVIDAD 1: Columna Distribuidor (OBLIGATORIA)
-
-### ❓ ¿Por qué agregar la columna distribuidor?
-
-#### 1. **Particionado Eficiente en BigQuery**
-```sql
--- Con la columna distribuidor puedes hacer:
-SELECT * FROM ventas WHERE distribuidor = 1 AND fecha_cierre = '2024-01-01'
-
--- Sin la columna, tendrías que hacer:
-SELECT * FROM ventas WHERE _FILE_NAME LIKE '%Distribuidor_1%'
-```
-
-#### 2. **Mejores Consultas y Filtros**
-- Filtrar por distribuidor es instantáneo
-- Agregaciones por distribuidor son más eficientes  
-- Joins entre tablas son más simples
-
-#### 3. **Particionado de Tablas**
-```sql
--- BigQuery puede particionar automáticamente:
-CREATE TABLE dataset.ventas_partitioned
-PARTITION BY distribuidor
-AS SELECT * FROM ventas_raw
-```
-
-#### 4. **Control de Acceso**
-- Diferentes equipos pueden acceder solo a su distribuidor
-- Seguridad a nivel de fila basada en distribuidor
-- Auditoría más granular
-
-### 📍 Dónde Agregar la Columna
-
-Busca estos comentarios en `generador.py`:
-
-#### 1. Archivo de Ventas (línea ~299)
-```python
-ventas.append({
-    'sucursal': cliente.sucursal,
-    'cliente': cliente.id_cliente,
-    'fecha_cierre': fecha.strftime('%Y-%m-%d'),
-    'sku': producto_sku,
-    'venta_unidades': venta['cantidad'],
-    'venta_importe': venta['importe'],
-    'condicion_venta': cliente.condicion_venta
-    # TODO ESTUDIANTES: Agregar columna 'distribuidor' aquí
-    # 'distribuidor': distribuidor
-})
-```
-
-**✅ Solución:**
-```python
-ventas.append({
-    'sucursal': cliente.sucursal,
-    'cliente': cliente.id_cliente,
-    'fecha_cierre': fecha.strftime('%Y-%m-%d'),
-    'sku': producto_sku,
-    'venta_unidades': venta['cantidad'],
-    'venta_importe': venta['importe'],
-    'condicion_venta': cliente.condicion_venta,
-    'distribuidor': distribuidor  # ← AGREGAR ESTA LÍNEA
-})
-```
-
-#### 2. Archivo de Stock (línea ~320)
-```python
-stock_record = {
-    'sucursal': distribuidor * 100 + 1,
-    'fecha_cierre': fecha_str,
-    'sku': sku,
-    'producto': PRODUCTOS[sku]['nombre'],
-    'stock': info['cantidad'],
-    'unidad': info['unidad']
-    # TODO ESTUDIANTES: Agregar columna 'distribuidor' aquí
-    # 'distribuidor': distribuidor
-}
-```
-
-**✅ Solución:**
-```python
-stock_record = {
-    'sucursal': distribuidor * 100 + 1,
-    'fecha_cierre': fecha_str,
-    'sku': sku,
-    'producto': PRODUCTOS[sku]['nombre'],
-    'stock': info['cantidad'],
-    'unidad': info['unidad'],
-    'distribuidor': distribuidor  # ← AGREGAR ESTA LÍNEA
-}
-```
-
-#### 3. Archivo Maestro (línea ~340)
-```python
-maestro_record = {
-    'sucursal': cliente.sucursal,
-    'cliente': cliente.id_cliente,
-    # ... otros campos ...
-    'tipo_negocio': cliente.tipo_negocio
-    # TODO ESTUDIANTES: Agregar columna 'distribuidor' aquí
-    # 'distribuidor': distribuidor
-}
-```
-
-**✅ Solución:**
-```python
-maestro_record = {
-    'sucursal': cliente.sucursal,
-    'cliente': cliente.id_cliente,
-    # ... otros campos ...
-    'tipo_negocio': cliente.tipo_negocio,
-    'distribuidor': distribuidor  # ← AGREGAR ESTA LÍNEA
-}
-```
+# Trabajo Práctico Final – Infraestructura en Ciencia de Datos  
+### Sistema de Venta Indirecta con Distribuidoras  
+**Universidad Nacional de San Martín (UNSAM)**  
+**Profesor:** Leandro E. Lucero  
+**Alumno:** Gonzalo Ariel Bolognese  
+**Año:** 2025  
 
 ---
 
-## ☁️ ACTIVIDAD 2: Google Cloud Storage (OPCIONAL)
+## ANÁLISIS
 
-### 🎯 Objetivo
-Implementar el método `_upload_to_gcs()` para subir automáticamente los archivos CSV generados a un bucket de Google Cloud Storage.
+El presente trabajo tiene como objetivo aplicar los conceptos aprendidos en la materia **Infraestructura en Ciencia de Datos** para el diseño de una arquitectura de procesamiento y análisis de datos en la nube.  
 
-### 📦 Preparación
+El caso práctico aborda el desarrollo de un **Sistema de Venta Indirecta con Distribuidoras**, en el cual cada distribuidor trabaja con sus propios sistemas de gestión y reporta información a una plataforma central de análisis.  
 
-#### 1. Instalar Dependencias
-```bash
-pip install google-cloud-storage
-```
+**Objetivos principales:**
+- Centralizar los datos de ventas, stock, clientes y deuda provenientes de distintas distribuidoras.  
+- Implementar un flujo automatizado de carga y procesamiento de datos utilizando servicios de **Google Cloud Platform (GCP)**.  
+- Diseñar una infraestructura **escalable, virtualizada y segura** que permita análisis y visualizaciones en tiempo real mediante dashboards.  
 
-#### 2. Configurar Credenciales
-```bash
-# Opción 1: Variable de entorno
-export GOOGLE_APPLICATION_CREDENTIALS="path/to/credentials.json"
-
-# Opción 2: Autenticación con gcloud
-gcloud auth application-default login
-```
-
-#### 3. Crear Bucket GCS
-```bash
-gsutil mb gs://mi-bucket-universidad
-```
-
-### 🔧 Implementación
-
-Busca el método `_upload_to_gcs()` en `generador.py` (línea ~XX) y reemplaza el contenido:
-
-**🚀 Código a Implementar:**
-```python
-def _upload_to_gcs(self, archivos, bucket_name, distribuidor):
-    """
-    Sube archivos a Google Cloud Storage.
-    """
-    try:
-        from google.cloud import storage
-        
-        # Crear cliente GCS
-        client = storage.Client()
-        bucket = client.bucket(bucket_name)
-        
-        # Subir cada archivo
-        for archivo in archivos:
-            if os.path.exists(archivo):
-                # Estructura: data/distribuidor_X/archivo.csv
-                blob_name = f"data/distribuidor_{distribuidor}/{os.path.basename(archivo)}"
-                blob = bucket.blob(blob_name)
-                
-                # Subir archivo
-                blob.upload_from_filename(archivo)
-                print(f"    ☁️ Subido a GCS: {blob_name}")
-                
-    except ImportError:
-        print("    ⚠️ google-cloud-storage no instalado")
-    except Exception as e:
-        print(f"    ❌ Error subiendo a GCS: {str(e)}")
-```
-
-### 🔌 Activar Subida GCS
-
-Busca el comentario en el bucle principal (línea ~XX):
-
-```python
-# 🎯 ACTIVIDAD ADICIONAL PARA ESTUDIANTES:
-# Implementar subida a Google Cloud Storage aquí
-# Ejemplo de uso:
-# archivos_a_subir = [archivo_ventas, archivo_stock]
-# if dia == 0:  # Agregar maestro solo el primer día
-#     archivos_a_subir.append(archivo_maestro)
-# self._upload_to_gcs(archivos_a_subir, 'nombre-bucket', distribuidor)
-```
-
-**✅ Solución:**
-```python
-# Subir archivos a GCS (implementado por estudiantes)
-archivos_a_subir = [archivo_ventas, archivo_stock]
-if dia == 0:  # Agregar maestro solo el primer día
-    archivos_a_subir.append(archivo_maestro)
-self._upload_to_gcs(archivos_a_subir, 'mi-bucket-universidad', distribuidor)
-```
-
-### 🏗️ Estructura Resultante en GCS
-```
-mi-bucket-universidad/
-├── data/
-│   ├── distribuidor_1/
-│   │   ├── Venta_Clientes_2024-01-01.csv
-│   │   ├── StockPeriodo_2024-01-01.csv
-│   │   └── Maestro_2024-01-01.csv
-│   ├── distribuidor_2/
-│   │   ├── Venta_Clientes_2024-01-01.csv
-│   │   └── ...
-│   └── distribuidor_3/
-└── ...
-```
+**Problemas detectados:**
+- Fuentes de datos heterogéneas y dispersas.  
+- Procesos manuales de consolidación de reportes.  
+- Necesidad de una plataforma flexible que soporte crecimiento anual del 20% (Clase 3).  
 
 ---
 
-## 🧪 Verificando las Implementaciones
+## DESARROLLO
 
-### 1. Ejecutar el generador
-```bash
-python generador.py
-```
+### 1. Arquitectura General del Sistema
 
-### 2. Verificar Actividad 1: Columna Distribuidor
-```bash
-# Verificar headers de archivos generados
-head -1 output/Archivos_VentaClientes/Distribuidor_1/Venta_Clientes_*.csv
-head -1 output/Archivos_Stock/Distribuidor_1/StockPeriodo_*.csv  
-head -1 output/Archivos_Maestro/Distribuidor_1/Maestro_*.csv
-```
+El sistema se estructura en tres niveles principales:
 
-**✅ Deberías ver:**
-```
-sucursal,cliente,fecha_cierre,sku,venta_unidades,venta_importe,condicion_venta,distribuidor
-sucursal,fecha_cierre,sku,producto,stock,unidad,distribuidor
-sucursal,cliente,ciudad,provincia,estado,...,distribuidor
-```
+1. **Redes Distribuidoras Locales:**  
+   Cada distribuidora cuenta con su propio “Sistema Ventanas” y “Agente Argentina Ideal”, que generan datos de:
+   - Clientes  
+   - Ventas  
+   - Stock  
+   - Deuda  
 
-### 3. Verificar Actividad 2: Subida GCS
-```bash
-# Listar archivos en GCS
-gsutil ls -r gs://mi-bucket-universidad/
+   Estos datos se exportan periódicamente y son subidos a un **bucket en Google Cloud Storage**.
 
-# Debería mostrar:
-# gs://mi-bucket-universidad/data/distribuidor_1/Venta_Clientes_2024-XX-XX.csv
-# gs://mi-bucket-universidad/data/distribuidor_1/StockPeriodo_2024-XX-XX.csv
-# etc.
-```
+2. **Sistema Central – Venta Indirecta:**  
+   El sistema central recibe la información consolidada de todas las distribuidoras y la almacena en un **Data Warehouse**.  
+   Posteriormente, los datos son transformados en **Data Mart** y visualizados mediante un **Dashboard** (Looker Studio).  
+
+3. **Usuarios Analíticos:**  
+   - Analista de Ventas y Marketing  
+   - Analista de Finanzas  
+   - Analista de Planificación de Suministros  
+
+   Cada uno accede a vistas específicas del Data Mart para la toma de decisiones.
 
 ---
 
-## 📊 Cargando a BigQuery
+### 2. Proceso de Generación y Carga de Datos
 
-### 1. Desde GCS (Recomendado)
-```sql
--- Crear tabla particionada por distribuidor
-CREATE TABLE `proyecto.distribucion_data.ventas`
-(
-  sucursal INT64,
-  cliente INT64,
-  fecha_cierre DATE,
-  sku STRING,
-  venta_unidades INT64,
-  venta_importe FLOAT64,
-  condicion_venta STRING,
-  distribuidor INT64
-)
-PARTITION BY distribuidor;
+Para simular las fuentes de información, se utilizó el script **`generador.py`**, que crea datasets de ventas y clientes para cada distribuidora.  
+Los archivos generados se almacenaron en el **Google Drive** y luego fueron cargados en un **bucket de Cloud Storage** dentro del proyecto de GCP.  
 
--- Cargar desde GCS
-LOAD DATA INTO `proyecto.distribucion_data.ventas`
-FROM FILES (
-  format = 'CSV',
-  skip_leading_rows = 1,
-  uris = ['gs://mi-bucket-universidad/data/*/Venta_Clientes_*.csv']
-);
-```
-
-### 2. Desde Local
-```bash
-# Cargar usando bq command line
-bq load --source_format=CSV --skip_leading_rows=1 \
-  proyecto:distribucion_data.ventas \
-  output/Archivos_VentaClientes/*/*.csv
-```
+Este bucket actúa como **zona de aterrizaje de datos (landing zone)**, desde donde una instancia de **Compute Engine** ejecuta procesos ETL (Extract, Transform, Load).
 
 ---
 
-## 📈 Consultas Optimizadas
+### 3. Servicios Utilizados en Google Cloud Platform (GCP)
 
-### Ventas por Distribuidor
-```sql
-SELECT 
-    distribuidor,
-    COUNT(*) as total_ventas,
-    SUM(venta_importe) as facturacion_total
-FROM `proyecto.distribucion_data.ventas`
-WHERE distribuidor = 1  -- Solo procesa partición 1
-  AND fecha_cierre >= '2024-01-01'
-GROUP BY distribuidor;
-```
+| Componente | Servicio GCP | Categoría | Función |
+|-------------|---------------|-----------|----------|
+| **Almacenamiento de datos brutos** | Cloud Storage | Storage Service | Guarda los datasets generados por `generador.py`. |
+| **Procesamiento y transformación (ETL)** | Compute Engine | IaaS – Computing Service | Ejecuta scripts de limpieza y carga hacia BigQuery. |
+| **Almacenamiento analítico** | BigQuery | Big Data Service | Actúa como Data Warehouse, permitiendo consultas SQL sobre grandes volúmenes de datos. |
+| **Visualización** | Looker Studio (Data Studio) | Visualización / BI | Construcción de dashboards con indicadores clave. |
+| **Orquestación (opcional)** | Cloud Dataflow / Cloud Composer | PaaS – Big Data | Automatiza los flujos de carga periódica. |
 
-### Stock Crítico por Distribuidor
-```sql
-SELECT 
-    distribuidor,
-    sku,
-    producto,
-    stock
-FROM `proyecto.distribucion_data.stock`
-WHERE distribuidor = 2  -- Solo partición 2
-  AND stock < 100
-ORDER BY stock ASC;
-```
-
-### Análisis Cross-Distribuidor
-```sql
--- Comparar performance entre distribuidores
-SELECT 
-    distribuidor,
-    AVG(venta_importe) as ticket_promedio,
-    COUNT(DISTINCT cliente) as clientes_unicos,
-    SUM(venta_importe) as facturacion_total
-FROM `proyecto.distribucion_data.ventas`
-WHERE fecha_cierre >= '2024-01-01'
-GROUP BY distribuidor
-ORDER BY facturacion_total DESC;
-```
+> **Referencia:**  
+> Clase 3 – *Servicios y herramientas de Engineer Computer*, diap. 10–15: “Computing Service y Storage Service”.  
+> Clase 5 – *Introducción a GCP*, diap. 20–30: “BigQuery, Dataflow, Datalab, AI Platform”.
 
 ---
 
-## ✅ Checklist de Completitud
+### 4. Tipos de Máquinas y Recursos en Compute Engine
 
-### Actividad 1: Columna Distribuidor
-- [ ] Agregué columna `distribuidor` en ventas
-- [ ] Agregué columna `distribuidor` en stock  
-- [ ] Agregué columna `distribuidor` en maestro
-- [ ] Ejecuté el generador sin errores
-- [ ] Verifiqué que los CSV incluyan la nueva columna
-- [ ] Los valores de distribuidor son correctos (1, 2, 3)
+Según el tipo de carga de trabajo, se definieron las siguientes opciones de instancias virtuales:
 
-### Actividad 2: GCS Upload (Opcional)
-- [ ] Instalé google-cloud-storage
-- [ ] Configuré credenciales de GCS
-- [ ] Creé bucket en GCS
-- [ ] Implementé método _upload_to_gcs()
-- [ ] Activé llamada al método en el bucle principal
-- [ ] Verifiqué que archivos se suban a GCS correctamente
-- [ ] La estructura de carpetas en GCS es correcta
+| Tipo de máquina | Familia | Uso recomendado | Características principales |
+|------------------|----------|------------------|------------------------------|
+| **E2-standard** | Uso general | Procesos ETL livianos y pruebas | Bajo costo, hasta 32 vCPU y 128 GB de RAM. |
+| **N2-standard** | Uso general | Consolidación de datos de varias distribuidoras | Escalable hasta 128 vCPU y 8 GB por vCPU. |
+| **A2-highgpu** | Optimizada para aceleradores (GPU NVIDIA A100) | Entrenamiento o inferencia de modelos ML | Alta capacidad de cómputo paralelo y 80 GB HBM2. |
 
-### BigQuery Integration
-- [ ] Cargué al menos un archivo en BigQuery
-- [ ] Creé tabla particionada por distribuidor
-- [ ] Ejecuté consultas con filtro por distribuidor
-- [ ] Verifiqué mejora de performance vs tabla no particionada
+> **Referencia:**  
+> Documentación “Tipos de máquinas GPU – Compute Engine” (Google Cloud, 2024)  
+> Guía comparativa de familias de máquinas – Compute Engine (2024).
 
 ---
 
-## 🏆 Beneficios Obtenidos
+### 5. Virtualización y Escalabilidad
 
-1. **Performance**: Consultas 10x más rápidas con particionado
-2. **Costos**: BigQuery solo procesa particiones necesarias
-3. **Escalabilidad**: Pipeline automático local → GCS → BigQuery
-4. **Mantenibilidad**: Código SQL más limpio y legible
-5. **Profesional**: Experiencia con herramientas cloud reales
+El uso de **Compute Engine** permite ejecutar máquinas virtuales en una infraestructura de nube distribuida, sin necesidad de hardware físico.  
+Estas VMs están basadas en tecnología de **hipervisores tipo 1** (bare metal), lo que garantiza aislamiento, rendimiento y seguridad (Clase 2, diap. 27).  
 
-## 🤔 Preguntas de Reflexión
+**Ventajas principales:**
+- Escalabilidad automática ante picos de demanda.  
+- Pago por uso (modelo OPEX vs CAPEX).  
+- Balanceo de carga y alta disponibilidad (Clase 5).  
+- Recuperación ante desastres y replicación automática.  
 
-1. **¿Qué ventajas tiene usar GCS como intermediario vs subir directo a BigQuery?**
-2. **¿Cómo implementarías particionado por fecha además de distribuidor?**
-3. **¿Qué estrategia usarías para datos incremental vs full refresh?**
-4. **¿Cómo manejarías errores en la subida a GCS en un entorno productivo?**
+La arquitectura propuesta puede escalar horizontalmente añadiendo más instancias por cada nueva distribuidora.
 
 ---
 
-## 💡 Conceptos Avanzados
+### 6. Flujo de Datos Resumido
 
-### Particionado Híbrido
-```sql
-CREATE TABLE ventas_optimizada
-PARTITION BY distribuidor
-CLUSTER BY fecha_cierre, cliente;
-```
+1. Distribuidoras locales generan y exportan datos.  
+2. Archivos subidos al **bucket de Cloud Storage**.  
+3. **Compute Engine** procesa y limpia los datos (Python / ETL).  
+4. Datos cargados a **BigQuery (Data Warehouse)**.  
+5. Generación de **Data Mart** con vistas temáticas (Ventas, Stock, Deuda).  
+6. Visualización en **Looker Studio** mediante conexión directa a BigQuery.  
 
-### Pipeline Completo
-```bash
-# 1. Generar datos
-python generador.py
+---
 
-# 2. Subir a GCS (automático si implementaste)
+## RESPUESTA
 
-# 3. Cargar a BigQuery
-bq load --source_format=CSV --skip_leading_rows=1 \
-  dataset.ventas gs://bucket/data/*/Venta_*.csv
+El sistema propuesto de **Venta Indirecta con Distribuidoras** permite integrar de forma eficiente la información de diferentes redes comerciales mediante una arquitectura **en la nube, virtualizada y escalable**.  
+
+**Principales beneficios:**
+- Centralización de datos críticos de negocio.  
+- Reducción de tiempos de procesamiento y errores manuales.  
+- Mayor capacidad analítica gracias a BigQuery y Looker Studio.  
+- Elasticidad para incorporar nuevas distribuidoras con mínima configuración.  
+- Bajo costo inicial y alta disponibilidad gracias a la infraestructura de Google Cloud.
+
+**Comparación Cloud vs On-Premise (según Clase 5):**
+| Criterio | On-Premise | Cloud Computing (GCP) |
+|-----------|-------------|-----------------------|
+| Costo inicial | Alto (CAPEX) | Nulo (modelo OPEX) |
+| Escalabilidad | Limitada | Automática |
+| Mantenimiento | Local y manual | Gestionado por Google |
+| Seguridad | Local y dependiente del hardware | Multi-factor, replicación y cifrado |
+| Elasticidad | Estática | Dinámica y bajo demanda |
+
+---
+
+## FUENTES
+
+- **Clase 1 – Introducción a la Arquitectura del Computador**  
+  Conceptos de CPU, memoria y jerarquía de almacenamiento.  
+- **Clase 2 – Arquitectura del Computador II**  
+  Virtualización, tipos de hipervisores y ventajas de la nube.  
+- **Clase 3 – Servicios y herramientas de Engineer Computer**  
+  Compute Engine, tipos de máquinas, GPU y casos de uso.  
+- **Clase 4 – Redes**  
+  Conectividad, redes virtuales y segmentación (VPC).  
+- **Clase 5 – Introducción a GCP**  
+  Modelos de servicio (IaaS, PaaS, SaaS), BigQuery, Dataflow, IAM.  
+- **Documentación oficial de Google Cloud (Compute Engine, 2024):**  
+  - *Tipos de máquinas GPU*  
+  - *Guía comparativa de familias de máquinas*
+
+---
+
+## CONCLUSIÓN
+
+La arquitectura desarrollada demuestra la aplicación integral de los conceptos de **infraestructura de ciencia de datos**, **virtualización** y **cloud computing** vistos en clase.  
+El sistema de **Venta Indirecta con Distribuidoras** consolida datos dispersos, optimiza recursos y permite a la organización contar con información analítica confiable y actualizada.  
+
+Su diseño en **Google Cloud Platform** garantiza escalabilidad, disponibilidad y seguridad, cumpliendo con los objetivos de una infraestructura moderna de ciencia de datos.
+
+---
+
 
 # 4. Ejecutar análisis
 bq query "SELECT distribuidor, SUM(venta_importe) FROM dataset.ventas GROUP BY 1"
