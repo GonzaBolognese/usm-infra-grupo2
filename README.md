@@ -168,8 +168,3 @@ El sistema de **Venta Indirecta con Distribuidoras** consolida datos dispersos, 
 Su diseño en **Google Cloud Platform** garantiza escalabilidad, disponibilidad y seguridad, cumpliendo con los objetivos de una infraestructura moderna de ciencia de datos.
 
 ---
-
-
-# 4. Ejecutar análisis
-bq query "SELECT distribuidor, SUM(venta_importe) FROM dataset.ventas GROUP BY 1"
-``` 
